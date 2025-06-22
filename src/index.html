@@ -1,0 +1,591 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MCP Filesystem Interface</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: rgba(255, 255, 255, 0.95);
+            border-radius: 20px;
+            padding: 30px;
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.1);
+            backdrop-filter: blur(10px);
+        }
+
+        h1 {
+            text-align: center;
+            color: #333;
+            margin-bottom: 30px;
+            font-size: 2.5rem;
+            background: linear-gradient(45deg, #667eea, #764ba2);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .upload-section {
+            border: 3px dashed #667eea;
+            border-radius: 15px;
+            padding: 40px;
+            text-align: center;
+            margin-bottom: 30px;
+            background: rgba(102, 126, 234, 0.05);
+            transition: all 0.3s ease;
+        }
+
+        .upload-section:hover {
+            border-color: #764ba2;
+            background: rgba(118, 75, 162, 0.1);
+            transform: translateY(-2px);
+        }
+
+        .upload-section.dragover {
+            border-color: #28a745;
+            background: rgba(40, 167, 69, 0.1);
+        }
+
+        #folderInput {
+            display: none;
+        }
+
+        .upload-btn {
+            background: linear-gradient(45deg, #667eea, #764ba2);
+            color: white;
+            border: none;
+            padding: 15px 30px;
+            border-radius: 25px;
+            cursor: pointer;
+            font-size: 1.1rem;
+            font-weight: 600;
+            transition: all 0.3s ease;
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.2);
+        }
+
+        .upload-btn:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 8px 25px rgba(0, 0, 0, 0.3);
+        }
+
+        .file-list {
+            margin: 20px 0;
+            padding: 20px;
+            background: rgba(102, 126, 234, 0.05);
+            border-radius: 15px;
+            border-left: 5px solid #667eea;
+        }
+
+        .file-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 10px;
+            margin: 5px 0;
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+            transition: all 0.3s ease;
+        }
+
+        .file-item:hover {
+            transform: translateX(5px);
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.15);
+        }
+
+        .prompt-section {
+            margin-top: 30px;
+        }
+
+        .prompt-input {
+            width: 100%;
+            padding: 20px;
+            border: 2px solid #e0e0e0;
+            border-radius: 15px;
+            font-size: 1.1rem;
+            resize: vertical;
+            min-height: 80px;
+            font-family: inherit;
+            transition: all 0.3s ease;
+        }
+
+        .prompt-input:focus {
+            outline: none;
+            border-color: #667eea;
+            box-shadow: 0 0 20px rgba(102, 126, 234, 0.2);
+        }
+
+        .execute-btn {
+            background: linear-gradient(45deg, #28a745, #20c997);
+            color: white;
+            border: none;
+            padding: 15px 40px;
+            border-radius: 25px;
+            cursor: pointer;
+            font-size: 1.1rem;
+            font-weight: 600;
+            margin-top: 15px;
+            transition: all 0.3s ease;
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.2);
+        }
+
+        .execute-btn:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 8px 25px rgba(0, 0, 0, 0.3);
+        }
+
+        .execute-btn:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+            transform: none;
+            box-shadow: none;
+        }
+
+        .output {
+            margin-top: 20px;
+            padding: 20px;
+            background: #f8f9fa;
+            border-radius: 15px;
+            border-left: 5px solid #28a745;
+            font-family: 'Courier New', monospace;
+            white-space: pre-wrap;
+            max-height: 300px;
+            overflow-y: auto;
+        }
+
+        .connection-status {
+            display: inline-block;
+            padding: 8px 16px;
+            border-radius: 20px;
+            font-weight: 600;
+            margin-bottom: 20px;
+        }
+
+        .connected {
+            background: rgba(40, 167, 69, 0.1);
+            color: #28a745;
+            border: 2px solid #28a745;
+        }
+
+        .disconnected {
+            background: rgba(220, 53, 69, 0.1);
+            color: #dc3545;
+            border: 2px solid #dc3545;
+        }
+
+        .loading {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 3px solid rgba(102, 126, 234, 0.3);
+            border-radius: 50%;
+            border-top-color: #667eea;
+            animation: spin 1s ease-in-out infinite;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        .grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 30px;
+            margin-top: 30px;
+        }
+
+        @media (max-width: 768px) {
+            .grid {
+                grid-template-columns: 1fr;
+            }
+            
+            .container {
+                padding: 20px;
+            }
+            
+            h1 {
+                font-size: 2rem;
+            }
+        }
+
+        .example-commands {
+            background: rgba(255, 193, 7, 0.1);
+            border: 2px solid #ffc107;
+            border-radius: 15px;
+            padding: 20px;
+            margin-top: 20px;
+        }
+
+        .example-commands h3 {
+            color: #856404;
+            margin-bottom: 15px;
+        }
+
+        .example-commands ul {
+            list-style: none;
+            padding: 0;
+        }
+
+        .example-commands li {
+            background: white;
+            margin: 8px 0;
+            padding: 10px;
+            border-radius: 8px;
+            border-left: 4px solid #ffc107;
+            font-family: 'Courier New', monospace;
+            font-size: 0.9rem;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🗂️ MCP Filesystem Interface</h1>
+        
+        <div class="connection-status disconnected" id="connectionStatus">
+            ❌ Disconnected from MCP Server
+        </div>
+
+        <div class="upload-section" id="uploadSection">
+            <h2>📁 Upload Folder</h2>
+            <p>Drag and drop a folder here or click to browse</p>
+            <input type="file" id="folderInput" webkitdirectory multiple>
+            <button class="upload-btn" onclick="document.getElementById('folderInput').click()">
+                Choose Folder
+            </button>
+        </div>
+
+        <div class="grid">
+            <div>
+                <div class="file-list" id="fileList" style="display: none;">
+                    <h3>📋 Uploaded Files</h3>
+                    <div id="fileItems"></div>
+                </div>
+
+                <div class="prompt-section">
+                    <h3>💬 Command Prompt</h3>
+                    <textarea 
+                        class="prompt-input" 
+                        id="promptInput" 
+                        placeholder="Enter your command here (e.g., 'create file hello.txt with content Hello World!')"
+                    ></textarea>
+                    <button class="execute-btn" id="executeBtn" onclick="executeCommand()">
+                        Execute Command
+                    </button>
+                </div>
+            </div>
+
+            <div>
+                <div class="example-commands">
+                    <h3>📖 Example Commands</h3>
+                    <ul>
+                        <li>create file hello.txt with content Hello World!</li>
+                        <li>read file hello.txt</li>
+                        <li>edit file hello.txt with content Updated content</li>
+                        <li>delete file hello.txt</li>
+                        <li>list files</li>
+                    </ul>
+                </div>
+
+                <div class="output" id="output" style="display: none;">
+                    <h3>📤 Output</h3>
+                    <div id="outputContent"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script type="module">
+        // Simulate MCP client for demo purposes
+        // In a real implementation, this would connect to the actual MCP server
+        
+        let uploadedFiles = new Map();
+        let isConnected = false;
+        let workingDirectory = './workspace';
+
+        // Initialize the interface
+        document.addEventListener('DOMContentLoaded', function() {
+            setupEventListeners();
+            simulateConnection();
+        });
+
+        function setupEventListeners() {
+            const folderInput = document.getElementById('folderInput');
+            const uploadSection = document.getElementById('uploadSection');
+            const promptInput = document.getElementById('promptInput');
+
+            folderInput.addEventListener('change', handleFolderUpload);
+            
+            // Drag and drop functionality
+            uploadSection.addEventListener('dragover', handleDragOver);
+            uploadSection.addEventListener('dragleave', handleDragLeave);
+            uploadSection.addEventListener('drop', handleDrop);
+
+            // Enter key for prompt
+            promptInput.addEventListener('keydown', function(e) {
+                if (e.key === 'Enter' && e.ctrlKey) {
+                    executeCommand();
+                }
+            });
+        }
+
+        function simulateConnection() {
+            setTimeout(() => {
+                isConnected = true;
+                updateConnectionStatus();
+            }, 1000);
+        }
+
+        function updateConnectionStatus() {
+            const status = document.getElementById('connectionStatus');
+            if (isConnected) {
+                status.className = 'connection-status connected';
+                status.innerHTML = '✅ Connected to MCP Server';
+            } else {
+                status.className = 'connection-status disconnected';
+                status.innerHTML = '❌ Disconnected from MCP Server';
+            }
+        }
+
+        function handleDragOver(e) {
+            e.preventDefault();
+            e.currentTarget.classList.add('dragover');
+        }
+
+        function handleDragLeave(e) {
+            e.currentTarget.classList.remove('dragover');
+        }
+
+        function handleDrop(e) {
+            e.preventDefault();
+            e.currentTarget.classList.remove('dragover');
+            
+            const items = e.dataTransfer.items;
+            if (items) {
+                for (let i = 0; i < items.length; i++) {
+                    const item = items[i].webkitGetAsEntry();
+                    if (item && item.isDirectory) {
+                        processDirectory(item);
+                    }
+                }
+            }
+        }
+
+        function handleFolderUpload(e) {
+            const files = Array.from(e.target.files);
+            processFiles(files);
+        }
+
+        function processFiles(files) {
+            uploadedFiles.clear();
+            
+            files.forEach(file => {
+                const relativePath = file.webkitRelativePath;
+                uploadedFiles.set(relativePath, {
+                    file: file,
+                    content: null,
+                    type: file.type || 'text/plain'
+                });
+            });
+
+            displayFileList();
+            showOutput('Files uploaded successfully!');
+        }
+
+        function processDirectory(directoryEntry) {
+            // This would be implemented for drag and drop directory processing
+            console.log('Processing directory:', directoryEntry.name);
+        }
+
+        function displayFileList() {
+            const fileList = document.getElementById('fileList');
+            const fileItems = document.getElementById('fileItems');
+            
+            fileItems.innerHTML = '';
+            
+            uploadedFiles.forEach((fileData, path) => {
+                const fileItem = document.createElement('div');
+                fileItem.className = 'file-item';
+                fileItem.innerHTML = `
+                    <span>📄 ${path}</span>
+                    <span>${(fileData.file.size / 1024).toFixed(2)} KB</span>
+                `;
+                fileItems.appendChild(fileItem);
+            });
+
+            fileList.style.display = 'block';
+        }
+
+        async function executeCommand() {
+            const prompt = document.getElementById('promptInput').value.trim();
+            const executeBtn = document.getElementById('executeBtn');
+            
+            if (!prompt) {
+                showOutput('Please enter a command.');
+                return;
+            }
+
+            if (!isConnected) {
+                showOutput('Error: Not connected to MCP server.');
+                return;
+            }
+
+            executeBtn.disabled = true;
+            executeBtn.innerHTML = '<span class="loading"></span> Executing...';
+
+            try {
+                // Simulate command processing
+                const result = await simulateCommandExecution(prompt);
+                showOutput(result);
+            } catch (error) {
+                showOutput(`Error: ${error.message}`);
+            } finally {
+                executeBtn.disabled = false;
+                executeBtn.innerHTML = 'Execute Command';
+            }
+        }
+
+        async function simulateCommandExecution(prompt) {
+            // Simulate network delay
+            await new Promise(resolve => setTimeout(resolve, 500));
+
+            const lowerPrompt = prompt.toLowerCase();
+            
+            if (lowerPrompt.includes('create file')) {
+                const match = prompt.match(/create file (.+?) with content (.+)/i);
+                if (match) {
+                    const filename = match[1].trim();
+                    const content = match[2].trim();
+                    
+                    // Simulate file creation
+                    uploadedFiles.set(filename, {
+                        file: new File([content], filename, { type: 'text/plain' }),
+                        content: content,
+                        type: 'text/plain'
+                    });
+                    
+                    displayFileList();
+                    return `✅ File created successfully: ${filename}`;
+                }
+                return '❌ Invalid create file command. Use: create file filename.txt with content your content here';
+            }
+            
+            if (lowerPrompt.includes('read file')) {
+                const match = prompt.match(/read file (.+)/i);
+                if (match) {
+                    const filename = match[1].trim();
+                    
+                    // Check if file exists in uploaded files
+                    for (const [path, fileData] of uploadedFiles) {
+                        if (path.endsWith(filename) || path === filename) {
+                            if (fileData.content) {
+                                return `📄 Content of ${filename}:\n\n${fileData.content}`;
+                            } else {
+                                // Read file content if not cached
+                                const content = await readFileContent(fileData.file);
+                                fileData.content = content;
+                                return `📄 Content of ${filename}:\n\n${content}`;
+                            }
+                        }
+                    }
+                    return `❌ File not found: ${filename}`;
+                }
+                return '❌ Invalid read file command. Use: read file filename.txt';
+            }
+            
+            if (lowerPrompt.includes('edit file')) {
+                const match = prompt.match(/edit file (.+?) with content (.+)/i);
+                if (match) {
+                    const filename = match[1].trim();
+                    const newContent = match[2].trim();
+                    
+                    // Find and update file
+                    for (const [path, fileData] of uploadedFiles) {
+                        if (path.endsWith(filename) || path === filename) {
+                            fileData.content = newContent;
+                            fileData.file = new File([newContent], filename, { type: 'text/plain' });
+                            return `✅ File edited successfully: ${filename}`;
+                        }
+                    }
+                    return `❌ File not found: ${filename}`;
+                }
+                return '❌ Invalid edit file command. Use: edit file filename.txt with content new content here';
+            }
+            
+            if (lowerPrompt.includes('delete file')) {
+                const match = prompt.match(/delete file (.+)/i);
+                if (match) {
+                    const filename = match[1].trim();
+                    
+                    // Find and delete file
+                    for (const [path, fileData] of uploadedFiles) {
+                        if (path.endsWith(filename) || path === filename) {
+                            uploadedFiles.delete(path);
+                            displayFileList();
+                            return `✅ File deleted successfully: ${filename}`;
+                        }
+                    }
+                    return `❌ File not found: ${filename}`;
+                }
+                return '❌ Invalid delete file command. Use: delete file filename.txt';
+            }
+            
+            if (lowerPrompt.includes('list files')) {
+                if (uploadedFiles.size === 0) {
+                    return '📁 No files in workspace';
+                }
+                
+                let fileList = '📁 Files in workspace:\n\n';
+                for (const [path, fileData] of uploadedFiles) {
+                    const size = (fileData.file.size / 1024).toFixed(2);
+                    fileList += `📄 ${path} (${size} KB)\n`;
+                }
+                return fileList;
+            }
+            
+            return `❌ Unknown command. Available commands:
+• create file filename.txt with content your content
+• read file filename.txt  
+• edit file filename.txt with content new content
+• delete file filename.txt
+• list files`;
+        }
+
+        async function readFileContent(file) {
+            return new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                reader.onload = e => resolve(e.target.result);
+                reader.onerror = reject;
+                reader.readAsText(file);
+            });
+        }
+
+        function showOutput(message) {
+            const output = document.getElementById('output');
+            const outputContent = document.getElementById('outputContent');
+            
+            outputContent.textContent = message;
+            output.style.display = 'block';
+            
+            // Scroll to output
+            output.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        }
+
+        // Make functions globally available
+        window.executeCommand = executeCommand;
+    </script>
+</body>
+</html>
